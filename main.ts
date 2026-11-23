@@ -7,7 +7,7 @@
 //
 // Locally:  mkdir -p out && MAKEFUN_OUTPUT_DIR=out node main.ts
 
-import { copyFileSync, mkdirSync, statSync } from 'node:fs';
+import { copyFileSync, mkdirSync, readFileSync, statSync } from 'node:fs';
 import { dirname, join } from 'node:path';
 import { fileURLToPath } from 'node:url';
 
@@ -15,6 +15,17 @@ const here = dirname(fileURLToPath(import.meta.url));
 const outDir = process.env.MAKEFUN_OUTPUT_DIR ?? '/output';
 const src = join(here, 'entry.png');
 const dst = join(outDir, 'entry.png');
+
+// The gate tells PNG from JPEG by the first bytes and rejects a file that
+// is neither, so sniff the magic before copying: this entry ships JPEG
+// bytes under the entry.png name, which the gate expressly allows.
+const head = readFileSync(src).subarray(0, 8);
+const isJpeg = head[0] === 0xff && head[1] === 0xd8;
+const isPng = head.subarray(0, 4).equals(Buffer.from([0x89, 0x50, 0x4e, 0x47]));
+if (!isJpeg && !isPng) {
+  throw new Error('entry.png is neither PNG nor JPEG by its first bytes');
+}
+const format = isJpeg ? 'JPEG' : 'PNG';
 
 // The grader hands us a writable /output; locally MAKEFUN_OUTPUT_DIR may
 // point at a folder that does not exist yet, so make sure it is there.
@@ -29,4 +40,4 @@ const got = statSync(dst).size;
 if (got !== want) {
   throw new Error(`entry.png copy truncated: wrote ${got} of ${want} bytes`);
 }
-console.log(`entry.png: ${got} bytes copied to ${dst}`);
+console.log(`entry.png: ${got} bytes of ${format} copied to ${dst}`);
